@@ -104,6 +104,12 @@ else
 fi
 
 step '3 · Build from clean'
+# A fresh clone has no node_modules, so `tsc` is not on PATH and the build dies
+# with "command not found". One command should mean one command — install them.
+if [ ! -x node_modules/.bin/tsc ]; then
+  printf '  installing devDependencies (first run in this checkout)\n'
+  npm install --no-audit --no-fund >/dev/null 2>&1 || die 'npm install failed — run it by hand to see why'
+fi
 npm run clean >/dev/null 2>&1
 npm run build >/dev/null || die 'build failed'
 if [ ! -f dist/esm/index.d.ts ] || [ ! -f dist/cjs/index.js ]; then
