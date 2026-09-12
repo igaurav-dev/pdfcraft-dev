@@ -1,4 +1,4 @@
-// packages/contract/src/errors.ts
+// src/contract/errors.ts — generated; see index.ts
 //
 // Every error the API can return. The exception filter maps domain errors onto
 // this table, the SDK exposes `.code` from it, and the docs error reference is

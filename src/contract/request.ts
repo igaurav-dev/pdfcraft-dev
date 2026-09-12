@@ -1,4 +1,4 @@
-// packages/contract/src/request.ts
+// src/contract/request.ts — generated; see index.ts
 import { type OptionField, type RenderOptions } from './render-options.js';
 
 export const OUTPUT_MODES = ['binary', 'url'] as const;

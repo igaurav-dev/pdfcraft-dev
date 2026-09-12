@@ -1,4 +1,4 @@
-// packages/sdk/src/errors.ts
+// src/errors.ts
 import type { ErrorCode } from './contract/index.js';
 
 /** Every failure from the API arrives as one of these. Branch on `.code`. */

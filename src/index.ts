@@ -1,4 +1,4 @@
-// packages/sdk/src/index.ts
+// src/index.ts
 export {
   Renderer,
   type AsyncRenderInput,

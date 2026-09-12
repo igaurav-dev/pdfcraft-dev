@@ -1,4 +1,4 @@
-// packages/sdk/scripts/fixup.mjs
+// scripts/fixup.mjs
 // Marks each output tree with its module system so Node resolves both correctly.
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

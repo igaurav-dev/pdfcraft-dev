@@ -1,9 +1,10 @@
-// packages/contract/src/render-options.ts
+// src/contract/render-options.ts — generated; see index.ts
 //
 // The one description of the render option surface. The API builds its validator
 // from RENDER_OPTIONS_SPEC and the docs site builds its reference table from the
-// same constant, so the two cannot drift. The SDK vendors this file verbatim at
-// build time (see packages/sdk/scripts/vendor-contract.mjs) to stay dependency-free.
+// same constant, so the two cannot drift. The SDK, which lives in its own repo,
+// keeps a copy written by scripts/sync-sdk.mjs so it can stay dependency-free —
+// apps/api/test/contract-sync.spec.ts fails when this file changes without it.
 
 export type OptionKind =
   | { readonly kind: 'enum'; readonly values: readonly string[] }

@@ -1,4 +1,4 @@
-// packages/sdk/src/client.ts
+// src/client.ts
 import type {
   AsyncRenderAccepted,
   AsyncRenderRequest,

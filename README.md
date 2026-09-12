@@ -196,11 +196,12 @@ access to run your unit tests.
 
 ## Contributing
 
-This repository is generated from the PDFCraft monorepo, where the client and the API share
-one source of truth for option types and error codes. That means **pull requests here get
-overwritten** on the next release.
+Issues and pull requests are welcome.
 
-Bug reports and API feedback are very welcome as issues — that is what this repo is for.
+One exception: `src/contract/` is generated from the API's own option, plan and error
+definitions, so the client and the server cannot disagree about them. A change there has to
+start on the server side — open an issue and it will come back through as a release.
+Everything else is ordinary source.
 
 ## License
 
