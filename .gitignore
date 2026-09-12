@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.tgz
+
+# Only devDependencies here, both pinned to exact versions, so a lockfile adds
+# nothing a consumer or a rebuild can use — and an untracked one would trip the
+# clean-tree check on every publish.
+package-lock.json

@@ -1,0 +1,60 @@
+{
+  "name": "@pdfcraft-dev/pdf",
+  "version": "1.0.0",
+  "description": "HTML to PDF in one call. The official PDFCraft SDK.",
+  "license": "MIT",
+  "homepage": "https://pdfcraft.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/igaurav-dev/pdfcraft-dev.git"
+  },
+  "keywords": [
+    "pdf",
+    "pdf-api",
+    "html-to-pdf",
+    "html-to-pdf-api",
+    "url-to-pdf",
+    "pdf-generation",
+    "headless-chrome",
+    "puppeteer",
+    "playwright",
+    "invoice",
+    "chromium"
+  ],
+  "type": "module",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/esm/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.esm.json && tsc -p tsconfig.cjs.json && node scripts/fixup.mjs",
+    "typecheck": "tsc -p tsconfig.esm.json --noEmit",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.9",
+    "typescript": "5.9.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "bugs": {
+    "url": "https://github.com/igaurav-dev/pdfcraft-dev/issues"
+  }
+}
