@@ -1,7 +1,8 @@
 # @pdfcraft-dev/pdf
 
-**HTML to PDF in one call.** The official TypeScript client for [PDFCraft](https://pdfcraft.dev) —
-POST some HTML or a URL, get back a PDF rendered by real Chromium.
+**HTML to PDF, and PDF back to JSON.** The official TypeScript client for
+[PDFCraft](https://pdfcraft.dev) — POST some HTML or a URL and get a PDF rendered by real
+Chromium, or POST a PDF and get its tables and labelled fields back as structured data.
 
 [![npm](https://img.shields.io/npm/v/@pdfcraft-dev/pdf.svg)](https://www.npmjs.com/package/@pdfcraft-dev/pdf)
 [![zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](#what-you-are-installing)
@@ -35,13 +36,22 @@ source file the API validates requests against, so they cannot drift from the se
 Ships ESM and CommonJS. Works on Node 18+, Bun, Deno, Cloudflare Workers, Vercel Edge —
 anywhere there is a global `fetch`.
 
-## The four methods
+## The methods
 
 ```ts
+// HTML or a URL, out as a PDF
 const pdf = await pdfcraft.render({ html });            // Uint8Array (a Buffer in Node)
 const res = await pdfcraft.renderToUrl({ html });       // { url, expires_at, pages, bytes }
 const job = await pdfcraft.renderAsync({ html, callback_url });
 const sta = await pdfcraft.getRender(job.id);
+
+// A PDF, out as JSON
+const doc = await pdfcraft.extractPdf(bytes);           // { fields, tables, usage }
+const via = await pdfcraft.extract({ file, schema });   // same, with base64 or a URL
+const ref = await pdfcraft.extractToUrl({ file });      // { url, expires_at, pages }
+const ejb = await pdfcraft.extractAsync({ file, callback_url });
+const est = await pdfcraft.getExtraction(ejb.id);
+
 const use = await pdfcraft.usage();                     // { used, limit, resets_at }
 ```
 
@@ -99,6 +109,83 @@ options: { waitFor: { networkIdle: true } }             // good: no requests for
 options: { waitFor: { delayMs: 1500 } }                 // last resort: a guess
 ```
 
+## PDF to JSON
+
+The other direction. Hand it a PDF and get back the tables it reconstructed and the
+labelled fields it found — each with a bounding box saying where on the page it came from.
+
+```ts
+const doc = await pdfcraft.extractPdf(await readFile('invoice.pdf'));
+
+doc.fields['Invoice Number'];
+// { value: 'INV-2026-0417', raw: 'INV-2026-0417', page: 1, bbox: [115, 55, 176, 64] }
+
+doc.tables[0];
+// { page: 1,
+//   header: ['DESCRIPTION', 'QUANTITY', 'UNIT PRICE', 'TOTAL'],
+//   rows: [['Professional Services', '10', '1,000.00', '10,000.00'], …],
+//   bbox: [30, 133, 565, 230] }
+```
+
+**No OCR, and no model.** Extraction is geometric: text runs are grouped into lines, lines
+are split into columns on horizontal whitespace, and a table is a run of consecutive lines
+sharing a column count. The same document always produces the same JSON. A scan has no text
+layer to read, so it comes back as `extraction_failed` — and is not billed, because
+charging for a *no* that took twenty milliseconds to determine would be rude.
+
+A table broken across pages is stitched back together: consecutive pages whose header
+matches become one table and the repeated header rows are dropped, so a fourteen-page bank
+statement arrives as one table of 560 rows rather than fourteen tables and thirteen stray
+headers.
+
+### Asking for specific fields
+
+```ts
+const doc = await pdfcraft.extract({
+  file: base64Pdf,                                 // or an https URL to a PDF
+  schema: {
+    invoice_number: { type: 'string', match: 'Invoice Number' },
+    issued:         { type: 'date',   match: 'Invoice Date' },
+    total:          { type: 'number', match: 'Total' },
+  },
+  options: { pages: '1-5', tables: true, text: false },
+});
+
+doc.fields.issued;   // { value: '2026-08-21', raw: '21/08/2026', page: 1, bbox: […] }
+doc.fields.missing;  // null — the document does not contain it. Still a 200.
+```
+
+Matching ignores case and punctuation, so `invoice_number` finds `Invoice Number:` without
+being told. Numbers accept thousands separators, Indian digit grouping, a currency symbol
+and accounting negatives in parentheses.
+
+Ambiguous dates are deliberately **not** guessed. `03/04/2026` is two different days
+depending on who printed it, so it stays a string; `raw` always holds the text exactly as
+printed, which is how you decide.
+
+### Straight from a URL or from HTML
+
+```ts
+const doc = await pdfcraft.extract({
+  url: 'https://app.example.com/invoices/1042',
+  schema: { total: { type: 'number', match: 'Total' } },
+});
+```
+
+The page is rendered with the same Chromium as `render()`, then extracted. One call, one
+charge.
+
+### What it will not do
+
+- **No OCR.** No scans, no photographs, no handwriting.
+- **No encrypted PDFs.** Decrypt first — the API deliberately accepts no password, so it
+  never holds one.
+- **PDF in only.** Not DOCX, not XLSX. If your source is a web page, send `url` or `html`.
+- **500 pages per request.** Use `options.pages` beyond that.
+
+Extraction is billed **per page read**, not per call, so a page range narrows the bill as
+well as the work. `usage()` counts pages and renders in the same allowance.
+
 ## Errors
 
 Every failure is a `PDFCraftError` with a stable `.code` you can branch on. The codes are
@@ -128,6 +215,8 @@ try {
 | `render_failed`    | 422  | Navigation failed, selector never showed | **yes** — Chromium ran, your HTML broke |
 | `rate_limited`     | 429  | Too many requests per second             | no                                      |
 | `quota_exceeded`   | 429  | Monthly plan limit reached               | no                                      |
+| `unsupported_file` | 415  | Not a PDF, encrypted, or corrupt         | no                                      |
+| `extraction_failed`| 422  | Parsed, but no text layer — likely a scan| no                                      |
 | `internal_error`   | 500  | Our fault                                | no                                      |
 
 `error.retryable` is true for `network_error`, `429` and `5xx`. Retries on those happen
@@ -142,11 +231,16 @@ webhook handler or a job queue that retries.
 
 ```ts
 await pdfcraft.render({ html }, `invoice-${invoiceId}`);
+await pdfcraft.extract({ file }, `parse-${invoiceId}`);
 ```
 
-## Async renders
+Keys are per account and shared across both endpoints, so use distinct ones for a render
+and an extraction of the same document.
+
+## Async renders and extractions
 
 For documents that take a while, or when you do not want to hold a connection open.
+`extractAsync` is the same shape as `renderAsync` and signs its callback the same way.
 
 ```ts
 const { id } = await pdfcraft.renderAsync({
@@ -156,7 +250,14 @@ const { id } = await pdfcraft.renderAsync({
 
 // later, if you would rather poll than receive
 const { status, url } = await pdfcraft.getRender(id);
+
+// extraction is identical, with its own id space
+const job = await pdfcraft.extractAsync({ file, callback_url });
+const { status: s, url: u } = await pdfcraft.getExtraction(job.id);
 ```
+
+An extraction id is not a render id: `getRender` returns 404 on one and `getExtraction`
+returns 404 on a render id, deliberately, so neither can be probed with the other's ids.
 
 The callback is a POST with an `x-signature` header: HMAC-SHA256 of the **raw** request
 body, hex-encoded, keyed with your webhook secret from the dashboard. Verify it before

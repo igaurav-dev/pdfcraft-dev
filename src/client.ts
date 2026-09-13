@@ -1,7 +1,12 @@
 // src/client.ts
 import type {
+  AsyncExtractRequest,
   AsyncRenderAccepted,
   AsyncRenderRequest,
+  ExtractionStatusResponse,
+  ExtractRequest,
+  ExtractResponse,
+  ExtractUrlResponse,
   RenderRequest,
   RenderStatusResponse,
   RenderUrlResponse,
@@ -33,6 +38,8 @@ const DEFAULTS = {
  */
 export type RenderInput = Omit<RenderRequest, 'output'>;
 export type AsyncRenderInput = Omit<AsyncRenderRequest, 'output'>;
+export type ExtractInput = Omit<ExtractRequest, 'output'>;
+export type AsyncExtractInput = Omit<AsyncExtractRequest, 'output'>;
 
 export class Renderer {
   private readonly apiKey: string;
@@ -82,6 +89,68 @@ export class Renderer {
     return (await response.json()) as UsageResponse;
   }
 
+  // ── extraction ─────────────────────────────────────────────────────────────
+
+  /**
+   * A PDF in, its tables and labelled fields out, each with a bounding box.
+   *
+   * `file` takes base64 PDF bytes or an https URL to one; send `url` or `html`
+   * instead and the page is rendered first, then extracted — one call, one
+   * charge. Billed per page read, so `options.pages` narrows the bill as well as
+   * the work.
+   *
+   * There is no OCR: a scan has no text layer and comes back as
+   * `extraction_failed`, unbilled. Nothing here is guessed by a model, so the
+   * same document always produces the same answer.
+   */
+  async extract(input: ExtractInput, idempotencyKey?: string): Promise<ExtractResponse> {
+    const response = await this.send(
+      '/v1/extract',
+      { ...input, output: 'inline' },
+      idempotencyKey,
+    );
+    return (await response.json()) as ExtractResponse;
+  }
+
+  /** Stores the JSON and returns a signed link instead of the document itself. */
+  async extractToUrl(input: ExtractInput, idempotencyKey?: string): Promise<ExtractUrlResponse> {
+    const response = await this.send('/v1/extract', { ...input, output: 'url' }, idempotencyKey);
+    return (await response.json()) as ExtractUrlResponse;
+  }
+
+  /** Queues the extraction and calls back when it settles. */
+  async extractAsync(
+    input: AsyncExtractInput,
+    idempotencyKey?: string,
+  ): Promise<AsyncRenderAccepted> {
+    const response = await this.send('/v1/extract/async', input, idempotencyKey);
+    return (await response.json()) as AsyncRenderAccepted;
+  }
+
+  /**
+   * Polls one extraction. An extraction id is not a render id — `getRender`
+   * will 404 on one, and this will 404 on a render id, deliberately.
+   */
+  async getExtraction(id: string): Promise<ExtractionStatusResponse> {
+    const response = await this.request(`/v1/extractions/${encodeURIComponent(id)}`, {
+      method: 'GET',
+    });
+    return (await response.json()) as ExtractionStatusResponse;
+  }
+
+  /**
+   * Convenience for the common `file` case: hand it PDF bytes and it does the
+   * base64 for you. Kept out of `extract` itself so the request stays a plain
+   * JSON object you can log, diff or replay.
+   */
+  async extractPdf(
+    pdf: Uint8Array,
+    input: Omit<ExtractInput, 'file' | 'html' | 'url'> = {},
+    idempotencyKey?: string,
+  ): Promise<ExtractResponse> {
+    return this.extract({ ...input, file: toBase64(pdf) }, idempotencyKey);
+  }
+
   private send(path: string, body: unknown, idempotencyKey?: string): Promise<Response> {
     return this.request(path, {
       method: 'POST',
@@ -102,7 +171,10 @@ export class Renderer {
           ...init,
           headers: {
             authorization: `Bearer ${this.apiKey}`,
-            'user-agent': 'pdfcraft-sdk-js/1.0.0',
+            // Bump with the package version. Not read from package.json: that
+            // needs a JSON import, which resolves differently in the ESM and
+            // CJS builds and is not worth a dual-build problem for a header.
+            'user-agent': 'pdfcraft-sdk-js/1.2.0',
             ...(init.headers as Record<string, string> | undefined),
           },
           signal: AbortSignal.timeout(this.timeoutMs),
@@ -124,6 +196,24 @@ export class Renderer {
     }
     throw lastError ?? new PDFCraftError('internal_error', 'Request failed.', 500);
   }
+}
+
+/**
+ * Bytes to base64, in Node and in a browser, with no dependency either way.
+ *
+ * The browser path chunks rather than spreading the whole array into
+ * `String.fromCharCode`: a spread of a few hundred thousand arguments overflows
+ * the call stack, which for a PDF means the SDK works on your test file and
+ * throws RangeError on a real one.
+ */
+function toBase64(bytes: Uint8Array): string {
+  if (typeof Buffer !== 'undefined') return Buffer.from(bytes).toString('base64');
+  let binary = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
 }
 
 function backoffMs(attempt: number): number {

@@ -1,16 +1,30 @@
 // src/index.ts
 export {
   Renderer,
+  type AsyncExtractInput,
   type AsyncRenderInput,
+  type ExtractInput,
   type RenderInput,
   type RendererOptions,
 } from './client.js';
 export { PDFCraftError } from './errors.js';
 export type {
+  AsyncExtractRequest,
   AsyncRenderAccepted,
   AsyncRenderRequest,
+  Bbox,
   Cookie,
   ErrorCode,
+  ExtractedTable,
+  ExtractionStatusResponse,
+  ExtractOptions,
+  ExtractOutputMode,
+  ExtractRequest,
+  ExtractResponse,
+  ExtractUrlResponse,
+  FieldSpec,
+  FieldType,
+  FoundValue,
   Margin,
   OutputMode,
   RenderOptions,

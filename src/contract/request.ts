@@ -81,6 +81,109 @@ export interface WebhookPayload {
   error?: { code: string; message: string };
 }
 
+// ── extraction ───────────────────────────────────────────────────────────────
+// PDF in, structured JSON out. Shares the renders table and every piece of
+// request machinery with rendering, but the shapes are its own.
+
+export const EXTRACT_OUTPUT_MODES = ['inline', 'url'] as const;
+export type ExtractOutputMode = (typeof EXTRACT_OUTPUT_MODES)[number];
+
+export const FIELD_TYPES = ['string', 'number', 'boolean', 'date'] as const;
+export type FieldType = (typeof FIELD_TYPES)[number];
+
+export interface FieldSpec {
+  type: FieldType;
+  /** The label as printed on the page. Defaults to the field's own name. */
+  match?: string;
+}
+
+export interface ExtractOptions {
+  /** "1-5", "2", "1,4-6". Omit for the whole document. Billed per page read. */
+  pages?: string;
+  /** Table reconstruction. On by default. */
+  tables?: boolean;
+  /** Full text per page. Off by default — it is the bulkiest part of a response. */
+  text?: boolean;
+}
+
+export interface ExtractRequest {
+  /** Exactly one of file, html or url. Base64 PDF bytes, or an https URL to one. */
+  file?: string;
+  html?: string;
+  url?: string;
+  /** Omit to get every labelled field on the page, keyed by the label as printed. */
+  schema?: Record<string, FieldSpec>;
+  options?: ExtractOptions;
+  output?: ExtractOutputMode;
+}
+
+export interface AsyncExtractRequest extends ExtractRequest {
+  callback_url: string;
+}
+
+/** [x0, y0, x1, y1] in PDF points, origin top-left — the origin a browser uses. */
+export type Bbox = [number, number, number, number];
+
+/**
+ * A found value and where it came from.
+ *
+ * `raw` is always the text exactly as printed; `value` is that text coerced to
+ * the type asked for, or null when it could not be. Both are present because an
+ * ambiguous date is deliberately not guessed — 03/04/2026 is two different days
+ * depending on who printed it, and `raw` is how the caller decides.
+ */
+export interface FoundValue {
+  value: string | number | boolean | null;
+  raw: string;
+  page: number;
+  bbox: Bbox;
+}
+
+export interface ExtractedTable {
+  page: number;
+  /** Null when the geometry does not prove a header, rather than a guessed row. */
+  header: string[] | null;
+  rows: string[][];
+  bbox: Bbox;
+}
+
+export interface ExtractResponse {
+  id: string;
+  /** Pages actually read, and what you are billed for. */
+  pages: number;
+  /** Pages in the whole document, which is not the same thing. */
+  page_count: number;
+  /** A field the document does not contain is null, not an error. */
+  fields: Record<string, FoundValue | null>;
+  tables: ExtractedTable[];
+  /** Present only when options.text was set. */
+  text?: string[];
+  /** Present only when some page had no text layer. */
+  pages_without_text?: number[];
+  usage: { pages: number };
+  duration_ms: number;
+}
+
+/** What `output: "url"` returns instead of the document itself. */
+export interface ExtractUrlResponse {
+  id: string;
+  url: string;
+  expires_at: string;
+  pages: number;
+  duration_ms: number;
+}
+
+export interface ExtractionStatusResponse {
+  id: string;
+  status: RenderStatus;
+  pages?: number | null;
+  duration_ms?: number | null;
+  created_at: string;
+  url?: string;
+  expires_at?: string;
+  error_code?: string;
+}
+
 /** Top-level request fields, for the generated docs reference. */
 export const REQUEST_FIELDS_SPEC = [
   {
