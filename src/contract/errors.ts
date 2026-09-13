@@ -15,6 +15,8 @@ export const ERROR_CODES = [
   'render_failed',
   'rate_limited',
   'quota_exceeded',
+  'unsupported_file',
+  'extraction_failed',
   'internal_error',
 ] as const;
 
@@ -89,6 +91,28 @@ export const ERROR_TABLE = [
     when: 'A free-plan account has used all 100 renders in the current period.',
     whatToDo:
       'Upgrade, or wait for resets_at from GET /v1/usage. Paid plans never hard-stop; they accrue overage.',
+  },
+  {
+    code: 'unsupported_file',
+    status: 415,
+    billable: false,
+    when: 'The file is not a PDF, is password-protected, or is corrupt beyond parsing.',
+    whatToDo:
+      'Send an unencrypted PDF. Decrypt it first — we deliberately do not accept passwords, so we never hold one.',
+  },
+  {
+    // NOT billable, unlike render_failed, and the difference is deliberate.
+    // render_failed bills because Chromium spent real work on a page that
+    // loaded and then threw. Detecting a missing text layer costs about 20ms
+    // per page and returns nothing of value, so charging for it would be
+    // charging for a "no". A schema field that simply isn't in the document is
+    // not this error — that is a 200 with a null field.
+    code: 'extraction_failed',
+    status: 422,
+    billable: false,
+    when: 'The PDF parsed but carries no text layer, so there is nothing to extract. Usually a scan or a photo.',
+    whatToDo:
+      'Check pages_without_text in the response. A scanned document needs OCR, which this endpoint does not do.',
   },
   {
     code: 'internal_error',
