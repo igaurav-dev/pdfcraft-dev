@@ -1,6 +1,6 @@
 {
   "name": "@pdfcraft-dev/pdf",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "HTML to PDF in one call. The official PDFCraft SDK.",
   "license": "MIT",
   "homepage": "https://pdfcraft.dev",
@@ -19,7 +19,11 @@
     "puppeteer",
     "playwright",
     "invoice",
-    "chromium"
+    "chromium",
+    "pdf-extraction",
+    "pdf-to-json",
+    "extract-tables-from-pdf",
+    "typescript"
   ],
   "type": "module",
   "main": "./dist/cjs/index.js",

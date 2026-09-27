@@ -88,7 +88,7 @@ export interface WebhookPayload {
 export const EXTRACT_OUTPUT_MODES = ['inline', 'url'] as const;
 export type ExtractOutputMode = (typeof EXTRACT_OUTPUT_MODES)[number];
 
-export const FIELD_TYPES = ['string', 'number', 'boolean', 'date'] as const;
+export const FIELD_TYPES = ['string', 'number', 'boolean', 'date', 'currency'] as const;
 export type FieldType = (typeof FIELD_TYPES)[number];
 
 export interface FieldSpec {
@@ -97,6 +97,16 @@ export interface FieldSpec {
   match?: string;
 }
 
+/**
+ * One field in a schema.
+ *
+ * The shorthand is the string form — `{ total: "currency" }` — which is what
+ * you want nine times out of ten. Reach for the object form only when the key
+ * you want in the response is not the label printed on the page:
+ * `{ total: { type: "currency", match: "Amount Due" } }`.
+ */
+export type FieldSchemaEntry = FieldType | FieldSpec;
+
 export interface ExtractOptions {
   /** "1-5", "2", "1,4-6". Omit for the whole document. Billed per page read. */
   pages?: string;
@@ -104,6 +114,22 @@ export interface ExtractOptions {
   tables?: boolean;
   /** Full text per page. Off by default — it is the bulkiest part of a response. */
   text?: boolean;
+  /**
+   * Also return each row keyed by its header, as `rows_as_objects`. Off by
+   * default: it repeats every column name on every row, roughly tripling the
+   * response for the same information.
+   */
+  rows_as_objects?: boolean;
+  /**
+   * The bar a block must clear to be returned as a table, 0-1. Defaults to 0.5.
+   *
+   * A page is a grid of boxes and not everything in a grid is a table — a
+   * two-column form, an address beside a logo, a row of footer links. Lower
+   * this to see every block the geometry found; raise it on a dense form where
+   * only the real data tables matter. `tables_suppressed` always says how many
+   * fell below whatever bar was in force.
+   */
+  min_confidence?: number;
 }
 
 export interface ExtractRequest {
@@ -112,7 +138,7 @@ export interface ExtractRequest {
   html?: string;
   url?: string;
   /** Omit to get every labelled field on the page, keyed by the label as printed. */
-  schema?: Record<string, FieldSpec>;
+  schema?: Record<string, FieldSchemaEntry>;
   options?: ExtractOptions;
   output?: ExtractOutputMode;
 }
@@ -135,15 +161,48 @@ export type Bbox = [number, number, number, number];
 export interface FoundValue {
   value: string | number | boolean | null;
   raw: string;
+  /**
+   * ISO 4217 code, for `type: "currency"` only.
+   *
+   * Null when the document gave no unambiguous signal. A bare "$" is used by
+   * the US, Canada, Australia, New Zealand, Singapore, Hong Kong, Mexico and a
+   * dozen more, so it is reported as null rather than guessed at — the same
+   * rule the date coercion follows, and for the same reason: an invoice
+   * silently relabelled from AUD to USD is not a recoverable error. Write
+   * "USD 1,234.56" or "$1,234.56 USD" in the document and you get "USD".
+   */
+  currency?: string | null;
+  /**
+   * 0-1. How much of this pairing was read off the page and how much inferred.
+   *
+   * An inline "Total: 1,200.00" is the document's own punctuation saying the
+   * two belong together. A value taken from the next column along, or
+   * reassembled across a line wrap, rests on a judgement that can be wrong —
+   * and a schema type that failed to parse lowers it further.
+   */
+  confidence: number;
   page: number;
   bbox: Bbox;
 }
 
 export interface ExtractedTable {
   page: number;
-  /** Null when the geometry does not prove a header, rather than a guessed row. */
+  /** Null when the evidence does not reach the bar, rather than a guessed row. */
   header: string[] | null;
+  /**
+   * 0-1. How much evidence there was that `header` is a header.
+   *
+   * Reported rather than hidden because the honest answer is often "probably".
+   * 1.0 is a numeric column under a textual label, repeated across a page break;
+   * 0.5 is a row in a different font and nothing more. Below 0.5 no header is
+   * promoted at all and this says how close it came.
+   */
+  header_confidence: number;
   rows: string[][];
+  /** Only when options.rows_as_objects was set AND a header was found. */
+  rows_as_objects?: Record<string, string>[];
+  /** 0-1. How sure we are this block is a table rather than a layout artifact. */
+  confidence: number;
   bbox: Bbox;
 }
 
@@ -156,6 +215,8 @@ export interface ExtractResponse {
   /** A field the document does not contain is null, not an error. */
   fields: Record<string, FoundValue | null>;
   tables: ExtractedTable[];
+  /** Blocks that scored below min_confidence. Present only when some were dropped. */
+  tables_suppressed?: number;
   /** Present only when options.text was set. */
   text?: string[];
   /** Present only when some page had no text layer. */

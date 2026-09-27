@@ -15,6 +15,7 @@ export const ERROR_CODES = [
   'render_failed',
   'rate_limited',
   'quota_exceeded',
+  'demo_busy',
   'unsupported_file',
   'extraction_failed',
   'internal_error',
@@ -91,6 +92,19 @@ export const ERROR_TABLE = [
     when: 'A free-plan account has used all 100 renders in the current period.',
     whatToDo:
       'Upgrade, or wait for resets_at from GET /v1/usage. Paid plans never hard-stop; they accrue overage.',
+  },
+  {
+    // The playground is a shared, unauthenticated resource paid for out of the
+    // same pocket as everything else, so it has a ceiling that is nothing to do
+    // with any one visitor's behaviour. Distinct from rate_limited on purpose:
+    // "you are going too fast" and "the free demo is saturated right now" need
+    // different words, and only one of them is fixed by signing up.
+    code: 'demo_busy',
+    status: 429,
+    billable: false,
+    when: 'The docs playground hit its per-IP or site-wide hourly ceiling. Never returned to an API key.',
+    whatToDo:
+      'Create a free account — 100 renders a month, no shared ceiling. The playground is a shop window, not an API.',
   },
   {
     code: 'unsupported_file',

@@ -174,7 +174,7 @@ export class Renderer {
             // Bump with the package version. Not read from package.json: that
             // needs a JSON import, which resolves differently in the ESM and
             // CJS builds and is not worth a dual-build problem for a header.
-            'user-agent': 'pdfcraft-sdk-js/1.2.0',
+            'user-agent': 'pdfcraft-sdk-js/1.3.0',
             ...(init.headers as Record<string, string> | undefined),
           },
           signal: AbortSignal.timeout(this.timeoutMs),
