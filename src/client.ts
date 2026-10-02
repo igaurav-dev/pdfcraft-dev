@@ -1,12 +1,15 @@
 // src/client.ts
 import type {
+  A11yScanAccepted,
+  A11yScanRequest,
+  A11yScanResponse,
   AsyncExtractRequest,
   AsyncRenderAccepted,
   AsyncRenderRequest,
-  ExtractionStatusResponse,
   ExtractRequest,
   ExtractResponse,
   ExtractUrlResponse,
+  ExtractionStatusResponse,
   RenderRequest,
   RenderStatusResponse,
   RenderUrlResponse,
@@ -138,6 +141,47 @@ export class Renderer {
     return (await response.json()) as ExtractionStatusResponse;
   }
 
+  // ── accessibility ───────────────────────────────────────────────────────
+
+  /**
+   * Starts an accessibility scan and returns at once with an id to poll.
+   *
+   * A scan of a thousand documents at one request per second per host has a
+   * floor measured in minutes, so there is nothing to return but an id and
+   * somewhere to look:
+   *
+   * ```ts
+   * let scan = await client.scan({ source: { domain: 'example.gov' },
+   *                                options: { max_documents: 500 } });
+   * while (scan.status !== 'succeeded' && scan.status !== 'failed') {
+   *   await new Promise((r) => setTimeout(r, 10_000));
+   *   scan = await client.getScan(scan.id);
+   * }
+   * ```
+   *
+   * `max_documents` is clamped to your plan rather than refused; the gap turns
+   * up as `discovered` minus `checked`, which is also the upgrade prompt.
+   */
+  async scan(input: A11yScanRequest): Promise<A11yScanAccepted> {
+    const response = await this.send('/v1/a11y/scan', input);
+    return (await response.json()) as A11yScanAccepted;
+  }
+
+  /**
+   * Polls one scan: progress while it runs, then every document ranked by
+   * priority with its findings and cost.
+   *
+   * `report_url` on a finished scan is a share token, not a path — anyone
+   * holding it can read the report with no account at all, so treat it as a
+   * credential rather than an identifier.
+   */
+  async getScan(id: string): Promise<A11yScanResponse> {
+    const response = await this.request(`/v1/a11y/scans/${encodeURIComponent(id)}`, {
+      method: 'GET',
+    });
+    return (await response.json()) as A11yScanResponse;
+  }
+
   /**
    * Convenience for the common `file` case: hand it PDF bytes and it does the
    * base64 for you. Kept out of `extract` itself so the request stays a plain
@@ -174,7 +218,7 @@ export class Renderer {
             // Bump with the package version. Not read from package.json: that
             // needs a JSON import, which resolves differently in the ESM and
             // CJS builds and is not worth a dual-build problem for a header.
-            'user-agent': 'pdfcraft-sdk-js/1.3.0',
+            'user-agent': 'pdfcraft-sdk-js/1.4.0',
             ...(init.headers as Record<string, string> | undefined),
           },
           signal: AbortSignal.timeout(this.timeoutMs),

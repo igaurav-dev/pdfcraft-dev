@@ -1,8 +1,9 @@
 # @pdfcraft-dev/pdf
 
-**HTML to PDF, and PDF back to JSON.** The official TypeScript client for
-[PDFCraft](https://pdfcraft.dev) — POST some HTML or a URL and get a PDF rendered by real
-Chromium, or POST a PDF and get its tables and labelled fields back as structured data.
+**HTML to PDF, PDF back to JSON, and accessibility triage.** The official TypeScript client
+for [PDFCraft](https://pdfcraft.dev) — POST some HTML or a URL and get a PDF rendered by real
+Chromium, POST a PDF and get its tables and labelled fields back as structured data, or point
+it at a domain and get every PDF on it checked against PDF/UA and WCAG 2.1 AA.
 
 [![npm](https://img.shields.io/npm/v/@pdfcraft-dev/pdf.svg)](https://www.npmjs.com/package/@pdfcraft-dev/pdf)
 [![zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](#what-you-are-installing)
@@ -51,6 +52,10 @@ const via = await pdfcraft.extract({ file, schema });   // same, with base64 or 
 const ref = await pdfcraft.extractToUrl({ file });      // { url, expires_at, pages }
 const ejb = await pdfcraft.extractAsync({ file, callback_url });
 const est = await pdfcraft.getExtraction(ejb.id);
+
+// A domain, out as a ranked accessibility report
+const scn = await pdfcraft.scan({ source: { domain } }); // { id, status, discovered }
+const rep = await pdfcraft.getScan(scn.id);             // { checked, failing, documents }
 
 const use = await pdfcraft.usage();                     // { used, limit, resets_at }
 ```
@@ -185,6 +190,56 @@ charge.
 
 Extraction is billed **per page read**, not per call, so a page range narrows the bill as
 well as the work. `usage()` counts pages and renders in the same allowance.
+
+## Accessibility
+
+Point it at a domain and it finds every PDF, checks each against PDF/UA and WCAG 2.1 AA, and
+returns a report ranked by severity weighted by reach, with a remediation cost range.
+
+```ts
+let scan = await pdfcraft.scan({
+  source: { domain: 'example.gov' },
+  options: { max_documents: 500 },
+});
+
+while (scan.status !== 'succeeded' && scan.status !== 'failed') {
+  await new Promise((r) => setTimeout(r, 10_000));
+  scan = await pdfcraft.getScan(scan.id);
+}
+
+for (const doc of scan.documents?.slice(0, 10) ?? []) {
+  // already ranked — this is the fix list, not an alphabetical dump
+  console.log(doc.severity, `${doc.score}/100`, doc.url);
+  console.log(`  $${doc.cost_low_usd}-$${doc.cost_high_usd} to remediate`);
+}
+```
+
+Exactly one of `source.domain`, `source.sitemap` or `source.urls`. A scan runs for minutes —
+one request per second per host is a rule we do not break — so `scan()` returns an id
+immediately and you poll `getScan()`.
+
+`max_documents` is **clamped to your plan rather than refused**. `discovered` minus `checked`
+is what was found and never looked at, which is also the upgrade prompt.
+
+`report_url` on a finished scan is a **share token**, not a path. Anyone holding it can read the
+full HTML report at `/r/<token>` with no account at all, and `/r/<token>/pdf` renders that same
+report to PDF through the render API. Treat it as a credential.
+
+Each finding carries `severity` (`'blocker' | 'major' | 'minor'`), the `wcag` criteria it
+breaks, a `message` written for whoever approves the budget, and `technical_detail` for whoever
+does the work. `occurrences` is volume, not severity — one check failing 1,535 times is one
+thing wrong, fixed once, so never sort on it.
+
+```ts
+import type { A11yFinding, A11yScanResponse, A11ySeverity } from '@pdfcraft-dev/pdf';
+```
+
+Half of what it checks is not machine-checkable by a conformance validator: whether the reading
+order stored in the file matches the page, whether a tagged table is really a grid, whether alt
+text describes anything or is just a filename. Those arrive with `layer: 'geometric'`.
+
+Accessibility is a **separate subscription** from rendering — an account can hold either, both
+or neither, and the free tier is a real scan of 25 documents with full findings.
 
 ## Errors
 

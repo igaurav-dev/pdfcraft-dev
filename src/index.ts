@@ -9,6 +9,14 @@ export {
 } from './client.js';
 export { PDFCraftError } from './errors.js';
 export type {
+  A11yDocumentResult,
+  A11yFinding,
+  A11yScanAccepted,
+  A11yScanOptions,
+  A11yScanRequest,
+  A11yScanResponse,
+  A11yScanSource,
+  A11ySeverity,
   AsyncExtractRequest,
   AsyncRenderAccepted,
   AsyncRenderRequest,
@@ -23,6 +31,7 @@ export type {
   ExtractResponse,
   ExtractUrlResponse,
   FieldSpec,
+  FindingLayer,
   FieldType,
   FoundValue,
   Margin,
@@ -32,6 +41,7 @@ export type {
   RenderStatus,
   RenderStatusResponse,
   RenderUrlResponse,
+  ScanStatus,
   UsageResponse,
   WaitFor,
   WebhookPayload,
